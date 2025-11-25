@@ -724,11 +724,38 @@ storegateway:
 # ======================================================================
 receive:
   enabled: true
+
+  # Multi-shard configuration
+  # Set shards to enable multi-shard mode, where each shard has its own StatefulSet,
+  # S3 bucket, and secret. Each shard can have multiple replicas.
+  # When shards is defined, the legacy replicaCount is ignored.
+  shards: []
+  # Example configuration:
+  # shards:
+  #   - name: shard-0
+  #     replicaCount: 3
+  #     objstore:
+  #       secretName: thanos-receive-shard-0-objstore
+  #       secretKey: objstore.yml
+  #   - name: shard-1
+  #     replicaCount: 3
+  #     objstore:
+  #       secretName: thanos-receive-shard-1-objstore
+  #       secretKey: objstore.yml
+  #     # Optional per-shard overrides
+  #     resources:
+  #       requests:
+  #         memory: 2Gi
+  #         cpu: 1
+  #     nodeSelector:
+  #       disktype: ssd
+
+  # Legacy single-shard configuration (used when shards is empty)
   replicaCount: 3
 
   # Optional multi tenancy header name to segregate tenants
   tenancyHeader: ""
-  
+
   # TSDB settings for local storage of samples before shipping to object store
   tsdb:
     # TSDB retention period for local WAL
@@ -741,6 +768,7 @@ receive:
   hashrings:
     # if enabled true, autogenerate a single ring named default with endpoints
     # receive-0.receive:10901 ... receive-(replicaCount-1).receive:10901
+    # In multi-shard mode, this generates endpoints for all shards
     autogen:
       enabled: true
       name: default

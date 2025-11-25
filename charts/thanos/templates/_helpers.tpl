@@ -182,6 +182,31 @@ volumeMounts:
 {{- end -}}
 
 {{- /* ============================== */ -}}
+{{- /* Receive multi-shard helpers    */ -}}
+{{- /* ============================== */ -}}
+
+{{- define "thanos.receive.isMultiShard" -}}
+{{- $shards := .Values.receive.shards | default list -}}
+{{- if gt (len $shards) 0 -}}
+true
+{{- else -}}
+false
+{{- end -}}
+{{- end -}}
+
+{{- define "thanos.receive.shardName" -}}
+{{- $root := index . 0 -}}
+{{- $shardName := index . 1 -}}
+{{- printf "%s-receive-%s" (include "thanos.fullname" $root) $shardName | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- define "thanos.receive.shardHeadless" -}}
+{{- $root := index . 0 -}}
+{{- $shardName := index . 1 -}}
+{{- printf "%s-receive-%s-headless" (include "thanos.fullname" $root) $shardName | trunc 63 | trimSuffix "-" -}}
+{{- end -}}
+
+{{- /* ============================== */ -}}
 {{- /* Receive hashrings helpers      */ -}}
 {{- /* ============================== */ -}}
 
@@ -192,30 +217,56 @@ volumeMounts:
 {{- define "thanos.receive.hashrings" -}}
 {{- $vals := .Values.receive | default dict -}}
 {{- $grpcPort := int (dig "service" "grpcPort" 10901 $vals) -}}
-{{- $rc := int (default 1 $vals.replicaCount) -}}
 {{- $ns := .Release.Namespace -}}
 {{- $domain := .Values.global.clusterDomain | default "cluster.local" -}}
+{{- $shards := $vals.shards | default list -}}
 
 {{- if and (hasKey $vals "hashrings") (hasKey $vals.hashrings "static") (gt (len $vals.hashrings.static) 0) -}}
 {{ $vals.hashrings.static | toPrettyJson }}
 
 {{- else if and (hasKey $vals "hashrings") (hasKey $vals.hashrings "autogen") ($vals.hashrings.autogen.enabled | default false) -}}
-  {{- $name := include "thanos.compName" (list . "receive") -}}
-  {{- $svcName := include "thanos.receiveHeadless" . -}}
   {{- $eps := list -}}
-  {{- range $i, $_ := until $rc -}}
-    {{- $ep := printf "%s-%d.%s.%s.svc.%s:%d" $name $i $svcName $ns $domain $grpcPort -}}
-    {{- $eps = append $eps $ep -}}
+  {{- if gt (len $shards) 0 -}}
+    {{- /* Multi-shard mode: generate endpoints for all shards */ -}}
+    {{- range $shard := $shards -}}
+      {{- $shardName := include "thanos.receive.shardName" (list $ $shard.name) -}}
+      {{- $svcName := include "thanos.receive.shardHeadless" (list $ $shard.name) -}}
+      {{- $rc := int (default 1 $shard.replicaCount) -}}
+      {{- range $i, $_ := until $rc -}}
+        {{- $ep := printf "%s-%d.%s.%s.svc.%s:%d" $shardName $i $svcName $ns $domain $grpcPort -}}
+        {{- $eps = append $eps $ep -}}
+      {{- end -}}
+    {{- end -}}
+  {{- else -}}
+    {{- /* Legacy single-shard mode */ -}}
+    {{- $rc := int (default 1 $vals.replicaCount) -}}
+    {{- $name := include "thanos.compName" (list . "receive") -}}
+    {{- $svcName := include "thanos.receiveHeadless" . -}}
+    {{- range $i, $_ := until $rc -}}
+      {{- $ep := printf "%s-%d.%s.%s.svc.%s:%d" $name $i $svcName $ns $domain $grpcPort -}}
+      {{- $eps = append $eps $ep -}}
+    {{- end -}}
   {{- end -}}
   {{- $rings := list (dict "endpoints" $eps) -}}
 {{ $rings | toPrettyJson }}
 
 {{- else -}}
-  {{- $name := include "thanos.compName" (list . "receive") -}}
-  {{- $svcName := include "thanos.receiveHeadless" . -}}
-  {{- $eps := list (printf "%s-0.%s.%s.svc.%s:%d" $name $svcName $ns $domain $grpcPort) -}}
-  {{- $rings := list (dict "endpoints" $eps) -}}
+  {{- if gt (len $shards) 0 -}}
+    {{- /* Multi-shard mode: default to first endpoint of first shard */ -}}
+    {{- $firstShard := index $shards 0 -}}
+    {{- $shardName := include "thanos.receive.shardName" (list . $firstShard.name) -}}
+    {{- $svcName := include "thanos.receive.shardHeadless" (list . $firstShard.name) -}}
+    {{- $eps := list (printf "%s-0.%s.%s.svc.%s:%d" $shardName $svcName $ns $domain $grpcPort) -}}
+    {{- $rings := list (dict "endpoints" $eps) -}}
 {{ $rings | toPrettyJson }}
+  {{- else -}}
+    {{- /* Legacy single-shard mode: default to first endpoint */ -}}
+    {{- $name := include "thanos.compName" (list . "receive") -}}
+    {{- $svcName := include "thanos.receiveHeadless" . -}}
+    {{- $eps := list (printf "%s-0.%s.%s.svc.%s:%d" $name $svcName $ns $domain $grpcPort) -}}
+    {{- $rings := list (dict "endpoints" $eps) -}}
+{{ $rings | toPrettyJson }}
+  {{- end -}}
 {{- end -}}
 {{- end -}}
 

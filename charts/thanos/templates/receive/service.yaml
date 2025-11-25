@@ -1,10 +1,97 @@
 {{- if .Values.receive.enabled }}
+{{- $shards := .Values.receive.shards | default list -}}
+{{- $isMultiShard := gt (len $shards) 0 -}}
+
+{{- if $isMultiShard }}
+{{- /* Multi-shard mode: Create services for each shard */ -}}
+{{- range $shard := $shards }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thanos.receive.shardName" (list $ $shard.name) }}
+  labels:
+{{ include "thanos.labels" $ | indent 4 }}
+    app.kubernetes.io/component: receive
+    app.kubernetes.io/shard: {{ $shard.name }}
+  annotations:
+    {{- include "thanos.annotations" (dict "Values" $.Values "component" "receive") | nindent 4 }}
+spec:
+  type: {{ $.Values.receive.service.type }}
+  ports:
+    - name: http
+      port: {{ $.Values.receive.service.httpPort }}
+      targetPort: http
+    - name: remote-write
+      port: {{ $.Values.receive.service.remoteWritePort }}
+      targetPort: remote-write
+  selector:
+    app.kubernetes.io/component: receive
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/shard: {{ $shard.name }}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thanos.receive.shardHeadless" (list $ $shard.name) }}
+  labels:
+{{ include "thanos.labels" $ | indent 4 }}
+    app.kubernetes.io/component: receive
+    app.kubernetes.io/shard: {{ $shard.name }}
+  annotations:
+    {{- include "thanos.annotations" (dict "Values" $.Values "component" "receive") | nindent 4 }}
+spec:
+  clusterIP: None
+  type: ClusterIP
+  ports:
+    - name: grpc
+      port: {{ $.Values.receive.service.grpcPort }}
+      targetPort: grpc
+    - name: http
+      port: {{ $.Values.receive.service.httpPort }}
+      targetPort: http
+    - name: remote-write
+      port: {{ $.Values.receive.service.remoteWritePort }}
+      targetPort: remote-write
+  selector:
+    app.kubernetes.io/component: receive
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+    app.kubernetes.io/shard: {{ $shard.name }}
+{{- end }}
+
+{{- /* Multi-shard mode: Create a common service that selects all shards for remote-write */ -}}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thanos.compName" (list $ "receive") }}
+  labels:
+{{ include "thanos.labels" $ | indent 4 }}
+    app.kubernetes.io/component: receive
+  annotations:
+    {{- include "thanos.annotations" (dict "Values" $.Values "component" "receive") | nindent 4 }}
+spec:
+  type: {{ $.Values.receive.service.type }}
+  ports:
+    - name: http
+      port: {{ $.Values.receive.service.httpPort }}
+      targetPort: http
+    - name: remote-write
+      port: {{ $.Values.receive.service.remoteWritePort }}
+      targetPort: remote-write
+  selector:
+    app.kubernetes.io/component: receive
+    app.kubernetes.io/instance: {{ $.Release.Name }}
+
+{{- else }}
+{{- /* Legacy single-shard mode */ -}}
 apiVersion: v1
 kind: Service
 metadata:
   name: {{ include "thanos.compName" (list . "receive") }}
   labels:
 {{ include "thanos.labels" . | indent 4 }}
+    app.kubernetes.io/component: receive
   annotations:
     {{- include "thanos.annotations" (dict "Values" .Values "component" "receive") | nindent 4 }}
 spec:
@@ -13,7 +100,7 @@ spec:
     - name: http
       port: {{ .Values.receive.service.httpPort }}
       targetPort: http
-    - name: remote-write 
+    - name: remote-write
       port: {{ .Values.receive.service.remoteWritePort }}
       targetPort: remote-write
   selector:
@@ -26,6 +113,7 @@ metadata:
   name: {{ include "thanos.compName" (list . "receive") }}-headless
   labels:
 {{ include "thanos.labels" . | indent 4 }}
+    app.kubernetes.io/component: receive
   annotations:
     {{- include "thanos.annotations" (dict "Values" .Values "component" "receive") | nindent 4 }}
 spec:
@@ -35,7 +123,14 @@ spec:
     - name: grpc
       port: {{ .Values.receive.service.grpcPort }}
       targetPort: grpc
+    - name: http
+      port: {{ .Values.receive.service.httpPort }}
+      targetPort: http
+    - name: remote-write
+      port: {{ .Values.receive.service.remoteWritePort }}
+      targetPort: remote-write
   selector:
     app.kubernetes.io/component: receive
     app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}
 {{- end }}

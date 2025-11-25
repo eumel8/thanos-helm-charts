@@ -1,0 +1,148 @@
+# Example values file for multi-shard Thanos Receive configuration
+# This demonstrates how to configure multiple receive shards, each with their own
+# S3 bucket and secret configuration.
+
+global:
+  image:
+    repository: quay.io/thanos/thanos
+    tag: v0.39.2
+    pullPolicy: IfNotPresent
+
+receive:
+  enabled: true
+
+  # Multi-shard configuration
+  # Each shard is a separate StatefulSet with its own S3 bucket and replicas
+  shards:
+    - name: shard-0
+      replicaCount: 3
+      objstore:
+        secretName: thanos-receive-shard-0-objstore
+        secretKey: objstore.yml
+      # Optional per-shard resource overrides
+      resources:
+        requests:
+          memory: 2Gi
+          cpu: 1
+        limits:
+          memory: 4Gi
+          cpu: 2
+
+    - name: shard-1
+      replicaCount: 3
+      objstore:
+        secretName: thanos-receive-shard-1-objstore
+        secretKey: objstore.yml
+      resources:
+        requests:
+          memory: 2Gi
+          cpu: 1
+        limits:
+          memory: 4Gi
+          cpu: 2
+
+    - name: shard-2
+      replicaCount: 3
+      objstore:
+        secretName: thanos-receive-shard-2-objstore
+        secretKey: objstore.yml
+      resources:
+        requests:
+          memory: 2Gi
+          cpu: 1
+        limits:
+          memory: 4Gi
+          cpu: 2
+      # Optional per-shard node selector
+      nodeSelector:
+        disktype: ssd
+
+  # Common receive configuration applied to all shards
+  tenancyHeader: "THANOS-TENANT"
+
+  tsdb:
+    retention: 24h
+    walCompression: true
+
+  # Hashring configuration
+  # When autogen is enabled, it will automatically generate endpoints for all shards
+  hashrings:
+    autogen:
+      enabled: true
+      name: default
+
+  service:
+    type: ClusterIP
+    grpcPort: 10901
+    httpPort: 10902
+    remoteWritePort: 10908
+
+  persistence:
+    enabled: true
+    size: 50Gi
+    storageClass: fast-ssd
+    accessModes:
+      - ReadWriteOnce
+
+  resources:
+    requests:
+      memory: 2Gi
+      cpu: 1
+    limits:
+      memory: 4Gi
+      cpu: 2
+
+  probes:
+    readiness:
+      enabled: true
+      initialDelaySeconds: 5
+    liveness:
+      enabled: true
+      initialDelaySeconds: 30
+    startup:
+      enabled: true
+      failureThreshold: 60
+
+  serviceMonitor:
+    enabled: true
+
+  pdb:
+    enabled: true
+    minAvailable: 1
+
+---
+# Example: How to create the secrets for each shard
+# You would create these secrets manually or via your CI/CD pipeline
+
+# kubectl create secret generic thanos-receive-shard-0-objstore \
+#   --from-literal=objstore.yml='
+# type: S3
+# config:
+#   bucket: thanos-receive-shard-0
+#   endpoint: s3.amazonaws.com
+#   region: us-east-1
+#   access_key: YOUR_ACCESS_KEY
+#   secret_key: YOUR_SECRET_KEY
+# '
+
+# kubectl create secret generic thanos-receive-shard-1-objstore \
+#   --from-literal=objstore.yml='
+# type: S3
+# config:
+#   bucket: thanos-receive-shard-1
+#   endpoint: s3.amazonaws.com
+#   region: us-east-1
+#   access_key: YOUR_ACCESS_KEY
+#   secret_key: YOUR_SECRET_KEY
+# '
+
+# kubectl create secret generic thanos-receive-shard-2-objstore \
+#   --from-literal=objstore.yml='
+# type: S3
+# config:
+#   bucket: thanos-receive-shard-2
+#   endpoint: s3.amazonaws.com
+#   region: us-east-1
+#   access_key: YOUR_ACCESS_KEY
+#   secret_key: YOUR_SECRET_KEY
+# '
