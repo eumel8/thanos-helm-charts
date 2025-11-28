@@ -1,0 +1,15 @@
+{{- if .Values.haproxy.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "thanos.fullname" . }}-haproxy
+spec:
+  type: {{ .Values.haproxy.service.type }}
+  selector:
+    app: {{ include "thanos.fullname" . }}-haproxy
+  ports:
+    - name: http
+      port: {{ .Values.haproxy.service.port }}
+      targetPort: {{ .Values.haproxy.service.targetPort | default .Values.haproxy.service.port }}
+{{- end }}
+

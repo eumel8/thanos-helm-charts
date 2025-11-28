@@ -884,6 +884,35 @@ receive:
     maxUnavailable: ""
 
 # ======================================================================
+# HAProxy für sharded Thanos Receive
+# ======================================================================
+haproxy:
+  enabled: true
+  replicaCount: 2
+  image:
+    repository: haproxy
+    tag: "2.9"
+    pullPolicy: IfNotPresent
+  hashHeader: "X-Cluster-ID"
+  resources:
+    requests:
+      cpu: "100m"
+      memory: "128Mi"
+    limits:
+      cpu: "500m"
+      memory: "512Mi"
+  service:
+    type: ClusterIP
+    port: 80
+    targetPort: 80
+  ingress:
+    enabled: false
+    host: metrics.example.com
+    annotations: {}
+    tls: false
+    tlsSecretName: ""
+
+# ======================================================================
 # Ruler component
 # Evaluates alerting and recording rules using query and sends to Alertmanager
 # ======================================================================

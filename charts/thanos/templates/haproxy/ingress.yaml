@@ -1,0 +1,29 @@
+{{- if and .Values.haproxy.enabled .Values.haproxy.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "thanos.fullname" . }}-haproxy-ingress
+  annotations:
+    {{- with .Values.haproxy.ingress.annotations }}
+    {{ toYaml . | indent 4 }}
+    {{- end }}
+spec:
+  rules:
+  - host: {{ .Values.haproxy.ingress.host }}
+    http:
+      paths:
+      - path: /api/v1/receive
+        pathType: Prefix
+        backend:
+          service:
+            name: {{ include "thanos.fullname" . }}-haproxy
+            port:
+              number: {{ .Values.haproxy.service.port }}
+  {{- if .Values.haproxy.ingress.tls }}
+  tls:
+  - hosts:
+    - {{ .Values.haproxy.ingress.host }}
+    secretName: {{ .Values.haproxy.ingress.tlsSecretName }}
+  {{- end }}
+{{- end }}
+

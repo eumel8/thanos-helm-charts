@@ -1,0 +1,31 @@
+{{- if .Values.haproxy.enabled }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "thanos.fullname" . }}-haproxy
+data:
+  haproxy.cfg: |
+    global
+      log stdout format raw local0
+      maxconn 4000
+
+    defaults
+      log global
+      mode http
+      option httplog
+      timeout connect 30s
+      timeout client 600s
+      timeout server 600s
+
+    frontend fe_receive
+      bind *:{{ .Values.haproxy.service.port }}
+      default_backend be_receive
+
+    backend be_receive
+      balance hdr({{ .Values.haproxy.hashHeader }})
+      hash-type consistent
+{{- range .Values.receive.shards }}
+      server {{ .name }} {{ .name }}.{{ $.Release.Namespace }}.svc.cluster.local:{{ .port }} check
+{{- end }}
+{{- end }}
+
